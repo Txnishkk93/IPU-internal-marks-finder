@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  pdfUploads    PdfUpload[]
+
+  @@map("user")
+}
+
+model Session {
+  id         String   @id
+  expiresAt  DateTime
+  token      String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ipAddress  String?
+  userAgent  String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id          String  @id
+  accountId   String
+  providerId  String
+  userId      String
+  accessToken String?
+  refreshToken String?
+  idToken     String?
+  expiresAt   DateTime?
+  password    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}
+
+model Institute {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  code      String?   @db.VarChar(50)
+  createdAt DateTime  @default(now())
+  programmes Programme[]
+  pdfUploads PdfUpload[]
+
+  @@map("institutes")
+}
+
+model Programme {
+  id         Int      @id @default(autoincrement())
+  name       String
+  code       String   @db.VarChar(50)
+  instituteId Int
+  createdAt  DateTime @default(now())
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  students    Student[]
+
+  @@map("programmes")
+}
+
+model Student {
+  id          Int       @id @default(autoincrement())
+  enrollmentNo String   @unique @db.VarChar(50)
+  name        String    @db.VarChar(255)
+  programmeId Int
+  createdAt   DateTime  @default(now())
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  marks       Mark[]
+
+  @@map("students")
+}
+
+model Mark {
+  id         Int      @id @default(autoincrement())
+  studentId  Int
+  semester   Int
+  subjectCode String  @db.VarChar(50)
+  subjectName String  @db.VarChar(255)
+  totalMarks Decimal? @db.Decimal(5, 2)
+  createdAt  DateTime @default(now())
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("marks")
+}
+
+model PdfUpload {
+  id           Int      @id @default(autoincrement())
+  uploadedBy   String
+  fileName     String   @db.VarChar(255)
+  uploadedAt   DateTime @default(now())
+  semester     Int
+  instituteId  Int
+  processedRows Int     @default(0)
+  status       String  @default("processing")
+  uploadedByUser User?  @relation(fields: [uploadedBy], references: [id])
+  institute     Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+
+  @@map("pdf_uploads")
+}
