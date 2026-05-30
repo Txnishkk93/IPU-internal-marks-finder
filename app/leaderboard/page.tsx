@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -59,16 +58,19 @@ export default function LeaderboardPage() {
   const [selectedInstitute, setSelectedInstitute] = useState<number | undefined>(undefined)
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const searchParams = useSearchParams()
 
   useEffect(() => {
     // initialize from URL query params (if any)
     try {
-      const sem = searchParams?.get('semester') || ''
-      const subj = searchParams?.get('subject') || ''
-      const br = searchParams?.get('branch') || ''
-      const bt = searchParams?.get('batch') || ''
-      const inst = searchParams?.get('instituteId') || ''
+      const params =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search)
+          : new URLSearchParams('')
+      const sem = params.get('semester') || ''
+      const subj = params.get('subject') || ''
+      const br = params.get('branch') || ''
+      const bt = params.get('batch') || ''
+      const inst = params.get('instituteId') || ''
       if (sem) setSemester(sem)
       if (subj) setSubject(subj)
       if (br) setBranch(br)
