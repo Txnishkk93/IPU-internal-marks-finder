@@ -100,14 +100,16 @@ model Student {
 }
 
 model Mark {
-  id         Int      @id @default(autoincrement())
-  studentId  Int
-  semester   Int
-  subjectCode String  @db.VarChar(50)
-  subjectName String  @db.VarChar(255)
-  totalMarks Decimal? @db.Decimal(5, 2)
-  createdAt  DateTime @default(now())
-  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  studentId     Int
+  semester      Int
+  subjectCode   String   @db.VarChar(50)
+  subjectName   String   @db.VarChar(255)
+  internalMarks Decimal? @db.Decimal(5, 2)
+  externalMarks Decimal? @db.Decimal(5, 2)
+  totalMarks    Decimal? @db.Decimal(5, 2)
+  createdAt     DateTime @default(now())
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@map("marks")
 }

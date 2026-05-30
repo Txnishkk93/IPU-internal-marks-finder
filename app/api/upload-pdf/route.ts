@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { auth } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 import { parsePdfMarks, parseResultText } from '@/lib/pdf-parser'
 import { uploadPDFAndSeed } from '@/app/actions/marks'
 
@@ -15,15 +16,30 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file')
-    const instituteId = Number(formData.get('instituteId'))
+    const instituteInput = String(formData.get('instituteId') ?? '').trim()
+    let instituteId = Number(instituteInput)
     const semester = Number(formData.get('semester'))
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!instituteId || Number.isNaN(instituteId)) {
+    if (!instituteInput) {
       return NextResponse.json({ error: 'Institute ID is required' }, { status: 400 })
+    }
+
+    let institute = null
+    if (!Number.isNaN(instituteId) && instituteId > 0) {
+      institute = await prisma.institute.findUnique({ where: { id: instituteId } })
+    }
+    if (!institute) {
+      institute = await prisma.institute.findFirst({ where: { code: instituteInput } })
+      if (institute) {
+        instituteId = institute.id
+      }
+    }
+    if (!institute) {
+      return NextResponse.json({ error: 'Institute not found' }, { status: 400 })
     }
 
     if (!semester || Number.isNaN(semester)) {
@@ -34,8 +50,8 @@ export async function POST(request: NextRequest) {
     let students
 
     if (filename.endsWith('.pdf')) {
-      const buffer = Buffer.from(await file.arrayBuffer())
-      students = await parsePdfMarks(buffer)
+      const fileData = new Uint8Array(await file.arrayBuffer())
+      students = await parsePdfMarks(fileData)
     } else {
       const text = await file.text()
       students = parseResultText(text)

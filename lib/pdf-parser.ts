@@ -28,9 +28,10 @@ function extractLines(text: string) {
     .filter(Boolean)
 }
 
-function parseStudentHeader(line: string) {
-  const headerRegex = /Enrollment\s*:\s*([A-Z0-9]+)\s+Student Name\s*:\s*(.+?)\s+Sem\/Annual\s*:\s*(\d+)/i
-  const match = line.match(headerRegex)
+function parseStudentHeader(line: string, nextLine?: string) {
+  const combined = (line + (nextLine ? ' ' + nextLine : '')).replace(/\s+/g, ' ')
+  const headerRegex = /Enrollment(?:\s*(?:No\.?|Number))?\s*[:\-]?\s*([A-Z0-9-]+)\s+Student Name\s*[:\-]?\s*(.+?)\s+(?:Sem(?:\s*\/\s*Annual)?|Sem\/Annual|Sem Annual)\s*[:\-]?\s*(\d+)/i
+  const match = combined.match(headerRegex)
   if (!match) return null
 
   return {
@@ -52,9 +53,31 @@ function parseInstituteLine(line: string) {
   return match ? match[1].trim() : null
 }
 
+function parsePaperMeta(text: string) {
+  const codeMatch = text.match(/Paper\s*Code\s*[:\-]?\s*([A-Z0-9]+)/i)
+  const nameMatch = text.match(/Paper\s*Name\s*[:\-]?\s*([^\n\r]+)/i)
+
+  return {
+    code: codeMatch?.[1]?.trim() ?? 'UNKNOWN',
+    name: nameMatch?.[1]?.trim() ?? 'Unknown Subject',
+  }
+}
+
+function parseProgrammeFromText(text: string) {
+  const programmeMatch = text.match(/Programme\s*:\s*(.+)$/im)
+  if (programmeMatch) return programmeMatch[1].trim()
+
+  const degreeMatch = text.match(/Bachelor\s+of\s+Technology\s*\(([^)]+)\)/i)
+  if (degreeMatch) return `B.Tech ${degreeMatch[1].trim()}`
+
+  if (/Bachelor\s+of\s+Technology/i.test(text)) return 'Bachelor of Technology'
+
+  return null
+}
+
 function parseMarksFromLine(line: string) {
   const marks: ParsedMark[] = []
-  const regex = /([A-Z0-9]+(?:\s+[A-Z0-9]+)?)\s*\((\d+)\)/g
+  const regex = /([A-Z0-9]+(?:[\s\-\/][A-Z0-9]+)*)\s*\(?([0-9]+(?:\.[0-9]+)?)\)?/g
   let match: RegExpExecArray | null
 
   while ((match = regex.exec(line))) {
@@ -72,6 +95,41 @@ function parseMarksFromLine(line: string) {
   return marks
 }
 
+function parseTableRow(
+  line: string,
+  subjectCode: string,
+  subjectName: string,
+  programme: string | null
+): ParsedStudent | null {
+  const tokens = line.trim().split(/\s+/).filter(Boolean)
+  if (tokens.length < 6) return null
+
+  // Expect rows like: BATCH SEM PAPERID ENROLLMENT STUDENT NAME ... MAX MARKS MARKS
+  const enrollmentCandidate = tokens[3]
+  if (!/^\d{8,}$/.test(enrollmentCandidate)) return null
+
+  const marksText = tokens[tokens.length - 1]
+  const marksValue = Number(marksText)
+  const studentNameTokens = tokens.slice(4, tokens.length - 2)
+
+  if (studentNameTokens.length === 0) return null
+
+  return {
+    enrollmentNo: enrollmentCandidate,
+    name: studentNameTokens.join(' '),
+    programme: programme ?? 'Unknown Programme',
+    marks: !Number.isNaN(marksValue)
+      ? [
+          {
+            subject: subjectName,
+            code: subjectCode,
+            marks: marksValue,
+          },
+        ]
+      : [],
+  }
+}
+
 export function parseResultText(text: string): ParsedStudent[] {
   const lines = extractLines(text)
   const students: ParsedStudent[] = []
@@ -79,7 +137,35 @@ export function parseResultText(text: string): ParsedStudent[] {
   let currentProgramme = 'Unknown Programme'
   let currentInstitute = ''
 
-  for (const line of lines) {
+  const paperMeta = parsePaperMeta(text)
+  const defaultProgramme = parseProgrammeFromText(text)
+
+  const tableHeaderIndex = lines.findIndex(
+    (line) => /ENROLLMENT/i.test(line) && /STUDENT\s+NAME/i.test(line)
+  )
+
+  if (tableHeaderIndex >= 0) {
+    for (let i = tableHeaderIndex + 1; i < lines.length; i += 1) {
+      const row = parseTableRow(
+        lines[i],
+        paperMeta.code,
+        paperMeta.name,
+        defaultProgramme
+      )
+      if (row) {
+        students.push(row)
+      }
+    }
+
+    if (students.length > 0) {
+      return students
+    }
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]
+    const nextLine = lines[i + 1]
+
     const institute = parseInstituteLine(line)
     if (institute) {
       currentInstitute = institute
@@ -92,7 +178,7 @@ export function parseResultText(text: string): ParsedStudent[] {
       continue
     }
 
-    const header = parseStudentHeader(line)
+    const header = parseStudentHeader(line, nextLine)
     if (header) {
       if (currentStudent) {
         students.push(currentStudent)
@@ -127,7 +213,7 @@ export function parseResultText(text: string): ParsedStudent[] {
   return students
 }
 
-export async function parsePdfMarks(input: Buffer): Promise<ParsedStudent[]> {
+export async function parsePdfMarks(input: Uint8Array): Promise<ParsedStudent[]> {
   GlobalWorkerOptions.workerSrc = ''
   GlobalWorkerOptions.disableWorker = true
 
